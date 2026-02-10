@@ -30,8 +30,10 @@ public struct GetFileHandler: Sendable {
 public struct SearchFilesHandler: Sendable {
     let client: GraphClient
 
-    public func handle(query: String) async throws -> ToolResult {
-        let data = try await client.get("/me/drive/root/search(q='\(query)')")
+    public func handle(query: String, top: Int = 50) async throws -> ToolResult {
+        let data = try await client.get("/me/drive/root/search(q='\(query)')", query: [
+            "$top": String(top)
+        ])
         return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: ["get-file"])
     }
 }

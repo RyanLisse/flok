@@ -16,7 +16,7 @@ let package = Package(
         .library(name: "FlokCore", targets: ["Core"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/steipete/Commander", from: "0.9.0"),
+        .package(url: "https://github.com/steipete/Commander", from: "0.2.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", from: "0.9.0"),
     ],
     targets: [
@@ -39,12 +39,12 @@ let package = Package(
             swiftSettings: sharedSwiftSettings
         ),
 
-        // MCP — Server + tools
+        // FlokMCP — Server + tools (renamed to avoid conflict with swift-sdk's MCP target)
         .target(
-            name: "MCP",
+            name: "FlokMCP",
             dependencies: [
                 "Core",
-                .product(name: "ModelContextProtocol", package: "swift-sdk"),
+                .product(name: "MCP", package: "swift-sdk"),
             ],
             path: "Sources/MCP",
             swiftSettings: sharedSwiftSettings
@@ -53,7 +53,7 @@ let package = Package(
         // Executable — Main entry point
         .executableTarget(
             name: "Executable",
-            dependencies: ["Core", "CLI", "MCP"],
+            dependencies: ["Core", "CLI", "FlokMCP"],
             path: "Sources/Executable",
             swiftSettings: sharedSwiftSettings
         ),
@@ -65,8 +65,9 @@ let package = Package(
             swiftSettings: sharedSwiftSettings
         ),
         .testTarget(
-            name: "MCPTests",
-            dependencies: ["MCP", "Core"],
+            name: "FlokMCPTests",
+            dependencies: ["FlokMCP", "Core"],
+            path: "Tests/MCPTests",
             swiftSettings: sharedSwiftSettings
         ),
     ]

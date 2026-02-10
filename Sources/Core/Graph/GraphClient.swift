@@ -181,7 +181,7 @@ public enum GraphError: Error, LocalizedError {
     }
 }
 
-extension JSONDecoder {
+public extension JSONDecoder {
     static let graph: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -189,7 +189,7 @@ extension JSONDecoder {
     }()
 }
 
-extension JSONEncoder {
+public extension JSONEncoder {
     static let graph: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

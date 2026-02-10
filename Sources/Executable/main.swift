@@ -51,11 +51,107 @@ struct Flok {
 
         case "mail":
             let sub = args.dropFirst().first ?? "list"
+            let subArgs = Array(args.dropFirst().dropFirst())
             switch sub {
             case "list":
                 try await MailListCommand.run(config: config, folder: "inbox", count: 25)
+            case "read":
+                guard let messageId = subArgs.first else {
+                    print("Error: message ID required")
+                    break
+                }
+                try await MailReadCommand.run(config: config, messageId: messageId)
+            case "send":
+                guard let toIndex = subArgs.firstIndex(of: "--to"),
+                      toIndex + 1 < subArgs.count,
+                      let subjIndex = subArgs.firstIndex(of: "--subject"),
+                      subjIndex + 1 < subArgs.count,
+                      let bodyIndex = subArgs.firstIndex(of: "--body"),
+                      bodyIndex + 1 < subArgs.count else {
+                    print("Error: --to, --subject, and --body required")
+                    break
+                }
+                let to = subArgs[toIndex + 1]
+                let subject = subArgs[subjIndex + 1]
+                let body = subArgs[bodyIndex + 1]
+                try await MailSendCommand.run(config: config, to: to, subject: subject, body: body)
+            case "search":
+                guard let query = subArgs.first else {
+                    print("Error: search query required")
+                    break
+                }
+                try await MailSearchCommand.run(config: config, query: query)
+            case "delete":
+                guard let messageId = subArgs.first else {
+                    print("Error: message ID required")
+                    break
+                }
+                try await MailDeleteCommand.run(config: config, messageId: messageId)
             default:
                 print("Unknown mail command: \(sub)")
+            }
+
+        case "calendar":
+            let sub = args.dropFirst().first ?? "list"
+            let subArgs = Array(args.dropFirst().dropFirst())
+            switch sub {
+            case "list":
+                var days = 7
+                if let daysIndex = subArgs.firstIndex(of: "--days"),
+                   daysIndex + 1 < subArgs.count,
+                   let daysValue = Int(subArgs[daysIndex + 1]) {
+                    days = daysValue
+                }
+                try await CalendarListCommand.run(config: config, days: days)
+            case "create":
+                guard let titleIndex = subArgs.firstIndex(of: "--title"),
+                      titleIndex + 1 < subArgs.count,
+                      let startIndex = subArgs.firstIndex(of: "--start"),
+                      startIndex + 1 < subArgs.count,
+                      let endIndex = subArgs.firstIndex(of: "--end"),
+                      endIndex + 1 < subArgs.count else {
+                    print("Error: --title, --start, and --end required")
+                    print("Example: flok calendar create --title 'Meeting' --start '2026-02-15T14:00:00' --end '2026-02-15T15:00:00'")
+                    break
+                }
+                let title = subArgs[titleIndex + 1]
+                let start = subArgs[startIndex + 1]
+                let end = subArgs[endIndex + 1]
+                try await CalendarCreateCommand.run(config: config, title: title, start: start, end: end)
+            default:
+                print("Unknown calendar command: \(sub)")
+            }
+
+        case "contacts":
+            let sub = args.dropFirst().first ?? "list"
+            let subArgs = Array(args.dropFirst().dropFirst())
+            switch sub {
+            case "list":
+                var search: String?
+                if let searchIndex = subArgs.firstIndex(of: "--search"),
+                   searchIndex + 1 < subArgs.count {
+                    search = subArgs[searchIndex + 1]
+                }
+                try await ContactListCommand.run(config: config, search: search)
+            default:
+                print("Unknown contacts command: \(sub)")
+            }
+
+        case "files":
+            let sub = args.dropFirst().first ?? "list"
+            let subArgs = Array(args.dropFirst().dropFirst())
+            switch sub {
+            case "list":
+                let path = subArgs.first
+                try await DriveListCommand.run(config: config, path: path)
+            case "search":
+                guard let query = subArgs.first else {
+                    print("Error: search query required")
+                    break
+                }
+                try await DriveSearchCommand.run(config: config, query: query)
+            default:
+                print("Unknown files command: \(sub)")
             }
 
         case "serve":
@@ -81,19 +177,39 @@ struct Flok {
           flok <command> [subcommand] [options]
 
         COMMANDS:
-          auth login        Authenticate with Microsoft (device code flow)
-          auth logout       Clear stored tokens
-          auth status       Check authentication status
-          mail list         List inbox messages
-          serve             Start MCP server (stdio transport)
-          version           Show version
-          help              Show this help
+          auth login                   Authenticate with Microsoft (device code flow)
+          auth logout                  Clear stored tokens
+          auth status                  Check authentication status
+
+          mail list                    List inbox messages
+          mail read <id>               Read a message by ID
+          mail send --to <email> --subject <subject> --body <body>
+          mail search <query>          Search messages
+          mail delete <id>             Delete a message
+
+          calendar list [--days N]     List upcoming events (default: 7 days)
+          calendar create --title <title> --start <ISO8601> --end <ISO8601>
+
+          contacts list [--search <query>]
+
+          files list [path]            List files in OneDrive
+          files search <query>         Search OneDrive files
+
+          serve                        Start MCP server (stdio transport)
+          version                      Show version
+          help                         Show this help
 
         ENVIRONMENT:
           PIGEON_CLIENT_ID    Azure AD app client ID (required)
           PIGEON_TENANT_ID    Azure AD tenant ID (default: common)
           PIGEON_READ_ONLY    Disable write operations (true/false)
           PIGEON_ACCOUNT      Account name for multi-account support
+
+        EXAMPLES:
+          flok mail send --to user@example.com --subject "Hello" --body "Test message"
+          flok calendar create --title "Team Meeting" --start "2026-02-15T14:00:00" --end "2026-02-15T15:00:00"
+          flok contacts list --search "John"
+          flok files search "budget"
         """)
     }
 }
