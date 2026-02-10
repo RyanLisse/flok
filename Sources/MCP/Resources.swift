@@ -1,0 +1,45 @@
+import Foundation
+import Core
+
+// MARK: - MCP Resources (Context Injection)
+
+/// Provides rich context to agents without requiring explicit tool calls.
+/// Resources are automatically injected into agent context.
+public struct FlokResources: Sendable {
+    let client: GraphClient
+
+    /// Resource: flok://inbox/summary — Recent inbox with unread count.
+    public func inboxSummary() async throws -> String {
+        let data = try await client.get("/me/mailFolders/inbox/messages", query: [
+            "$top": "10",
+            "$select": "subject,from,receivedDateTime,isRead,bodyPreview",
+            "$orderby": "receivedDateTime desc",
+        ])
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    /// Resource: flok://calendar/today — Today's events.
+    public func calendarToday() async throws -> String {
+        let now = Date()
+        let calendar = Foundation.Calendar.current
+        let startOfDay = calendar.startOfDay(for: now)
+        let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay)!
+
+        let formatter = ISO8601DateFormatter()
+        let data = try await client.get("/me/calendarView", query: [
+            "startDateTime": formatter.string(from: startOfDay),
+            "endDateTime": formatter.string(from: endOfDay),
+            "$select": "subject,start,end,location,organizer,isAllDay",
+            "$orderby": "start/dateTime",
+        ])
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    /// Resource: flok://me/profile — Current user profile.
+    public func userProfile() async throws -> String {
+        let data = try await client.get("/me", query: [
+            "$select": "displayName,mail,userPrincipalName,jobTitle"
+        ])
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+}
