@@ -404,12 +404,23 @@ public struct FlokMCPServer: Sendable {
                     )
 
                 case "respond-event":
-                    // This would need RespondEventHandler implementation
-                    return .init(content: [.text("respond-event not yet implemented")], isError: true)
+                    guard let eventId = params.arguments?["eventId"]?.stringValue,
+                          let response = params.arguments?["response"]?.stringValue else {
+                        return .init(content: [.text("Missing required parameters: eventId, response")], isError: true)
+                    }
+                    let comment = params.arguments?["comment"]?.stringValue
+                    let handler = RespondEventHandler(client: graphClient, readOnly: config.readOnly)
+                    result = try await handler.handle(eventId: eventId, response: response, comment: comment)
 
                 case "check-availability":
-                    // This would need CheckAvailabilityHandler implementation
-                    return .init(content: [.text("check-availability not yet implemented")], isError: true)
+                    guard let attendees = params.arguments?["attendees"]?.arrayValue?.compactMap({ $0.stringValue }),
+                          let startTime = params.arguments?["startTime"]?.stringValue,
+                          let endTime = params.arguments?["endTime"]?.stringValue else {
+                        return .init(content: [.text("Missing required parameters: attendees, startTime, endTime")], isError: true)
+                    }
+                    let timeZone = params.arguments?["timeZone"]?.stringValue ?? "UTC"
+                    let handler = CheckAvailabilityHandler(client: graphClient)
+                    result = try await handler.handle(emails: attendees, start: startTime, end: endTime, timeZone: timeZone)
 
                 // Contact tools
                 case "list-contacts":
@@ -426,8 +437,23 @@ public struct FlokMCPServer: Sendable {
                     result = try await handler.handle(contactId: contactId)
 
                 case "create-contact":
-                    // This would need CreateContactHandler implementation with proper parameters
-                    return .init(content: [.text("create-contact not yet implemented")], isError: true)
+                    guard let displayName = params.arguments?["displayName"]?.stringValue else {
+                        return .init(content: [.text("Missing required parameter: displayName")], isError: true)
+                    }
+                    // displayName is mapped to givenName as the primary field
+                    let email = params.arguments?["email"]?.stringValue
+                    let phone = params.arguments?["phone"]?.stringValue
+                    let company = params.arguments?["companyName"]?.stringValue
+                    let jobTitle = params.arguments?["jobTitle"]?.stringValue
+                    let handler = CreateContactHandler(client: graphClient, readOnly: config.readOnly)
+                    result = try await handler.handle(
+                        givenName: displayName,
+                        surname: nil,
+                        email: email,
+                        phone: phone,
+                        company: company,
+                        jobTitle: jobTitle
+                    )
 
                 // Drive tools
                 case "list-files":

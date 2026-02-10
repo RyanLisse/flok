@@ -99,4 +99,175 @@ struct ToolResultTests {
         #expect(decoded.data == original.data)
         #expect(decoded.nextActions == original.nextActions)
     }
+
+    // MARK: - JSON Structure Tests
+
+    @Test("ToolResult.ok JSON has expected keys")
+    func okResultJSONKeys() throws {
+        let result = ToolResult.ok("test data", nextActions: ["action1", "action2"])
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        // Parse JSON to verify structure
+        let jsonObject = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+
+        #expect(jsonObject.keys.contains("success"))
+        #expect(jsonObject.keys.contains("data"))
+        #expect(jsonObject.keys.contains("nextActions"))
+        #expect(jsonObject["success"] as? Bool == true)
+        #expect(jsonObject["data"] as? String == "test data")
+
+        let actions = jsonObject["nextActions"] as? [String]
+        #expect(actions == ["action1", "action2"])
+    }
+
+    @Test("ToolResult.fail JSON has expected keys")
+    func failResultJSONKeys() throws {
+        let result = ToolResult.fail("error message")
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        // Parse JSON to verify structure
+        let jsonObject = try JSONSerialization.jsonObject(with: jsonData) as! [String: Any]
+
+        #expect(jsonObject.keys.contains("success"))
+        #expect(jsonObject.keys.contains("error"))
+        #expect(jsonObject["success"] as? Bool == false)
+        #expect(jsonObject["error"] as? String == "error message")
+
+        // Ensure data and nextActions are either nil or not present
+        let data = jsonObject["data"]
+        let nextActions = jsonObject["nextActions"]
+        #expect(data == nil || (data is NSNull))
+        #expect(nextActions == nil || (nextActions is NSNull))
+    }
+
+    // MARK: - Special Characters Tests
+
+    @Test("ToolResult handles unicode characters in data")
+    func unicodeInData() throws {
+        let unicodeData = "Hello 世界 🌍 café naïve résumé"
+        let result = ToolResult.ok(unicodeData)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.data == unicodeData)
+    }
+
+    @Test("ToolResult handles newlines in data")
+    func newlinesInData() throws {
+        let multilineData = """
+        Line 1
+        Line 2
+        Line 3
+        """
+        let result = ToolResult.ok(multilineData)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.data == multilineData)
+        #expect(decoded.data?.contains("\n") == true)
+    }
+
+    @Test("ToolResult handles special JSON characters in data")
+    func specialJSONCharactersInData() throws {
+        let specialData = #"Special chars: " \ / backslash quote"#
+        let result = ToolResult.ok(specialData)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.data == specialData)
+    }
+
+    @Test("ToolResult handles unicode in error message")
+    func unicodeInError() throws {
+        let unicodeError = "エラー: File not found 📁"
+        let result = ToolResult.fail(unicodeError)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.error == unicodeError)
+    }
+
+    // MARK: - Long Data Tests
+
+    @Test("ToolResult handles long data string without truncation")
+    func longDataString() throws {
+        // Generate a long string (10KB+)
+        let longData = String(repeating: "This is a test message with some content. ", count: 250)
+        #expect(longData.count > 10_000)
+
+        let result = ToolResult.ok(longData, nextActions: ["process", "review"])
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.data == longData)
+        #expect(decoded.data?.count == longData.count)
+        #expect(decoded.nextActions == ["process", "review"])
+    }
+
+    @Test("ToolResult handles very long nextActions array")
+    func longNextActionsArray() throws {
+        let manyActions = (1...100).map { "action_\($0)" }
+        let result = ToolResult.ok("data", nextActions: manyActions)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.nextActions?.count == 100)
+        #expect(decoded.nextActions?[0] == "action_1")
+        #expect(decoded.nextActions?[99] == "action_100")
+    }
+
+    @Test("ToolResult handles JSON-like data string")
+    func jsonLikeDataString() throws {
+        let jsonLikeData = #"{"nested": "value", "array": [1, 2, 3], "bool": true}"#
+        let result = ToolResult.ok(jsonLikeData)
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.data == jsonLikeData)
+    }
+
+    @Test("ToolResult handles empty string data")
+    func emptyStringData() throws {
+        let result = ToolResult.ok("")
+
+        let encoder = JSONEncoder()
+        let jsonData = try encoder.encode(result)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ToolResult.self, from: jsonData)
+
+        #expect(decoded.success == true)
+        #expect(decoded.data == "")
+        #expect(decoded.error == nil)
+    }
 }

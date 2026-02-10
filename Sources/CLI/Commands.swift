@@ -354,3 +354,4 @@ public struct ServeCommand {
         try await mcpServer.start()
     }
 }
+

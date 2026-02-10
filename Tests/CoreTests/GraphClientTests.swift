@@ -295,8 +295,327 @@ struct GraphClientTests {
         #expect(!config.account.isEmpty)  // Default is "default"
         #expect(!config.apiVersion.isEmpty) // Default is "v1.0"
     }
+
+    @Test("FlokConfig explicit clientId overrides env var")
+    func configClientIdOverride() {
+        // Test that explicit parameter takes precedence even if env var is set
+        let config = FlokConfig(clientId: "explicit-client-id")
+        #expect(config.clientId == "explicit-client-id")
+    }
+
+    // MARK: - Auth Type Tests
+
+    @Test("TokenResponse decodes from realistic Azure AD JSON")
+    func tokenResponseDecoding() throws {
+        let json = """
+        {
+          "access_token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+          "token_type": "Bearer",
+          "expires_in": 3599,
+          "scope": "Mail.ReadWrite Calendars.ReadWrite User.Read",
+          "refresh_token": "0.AQoAzNq..."
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let token = try JSONDecoder().decode(TokenResponse.self, from: data)
+
+        #expect(token.accessToken == "eyJ0eXAiOiJKV1QiLCJhbGc...")
+        #expect(token.tokenType == "Bearer")
+        #expect(token.expiresIn == 3599)
+        #expect(token.scope == "Mail.ReadWrite Calendars.ReadWrite User.Read")
+        #expect(token.refreshToken == "0.AQoAzNq...")
+    }
+
+    @Test("TokenResponse decodes without optional refresh_token")
+    func tokenResponseNoRefreshToken() throws {
+        let json = """
+        {
+          "access_token": "eyJ0eXAiOiJKV1QiLCJhbGc...",
+          "token_type": "Bearer",
+          "expires_in": 3599
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let token = try JSONDecoder().decode(TokenResponse.self, from: data)
+
+        #expect(token.accessToken == "eyJ0eXAiOiJKV1QiLCJhbGc...")
+        #expect(token.refreshToken == nil)
+    }
+
+    @Test("DeviceCodeResponse decodes correctly")
+    func deviceCodeResponseDecoding() throws {
+        let json = """
+        {
+          "device_code": "BAQABAAEAAAAm-06blBE1TpVMil8KPQ41hF...",
+          "user_code": "BQKG-JZYF",
+          "verification_uri": "https://microsoft.com/devicelogin",
+          "expires_in": 900,
+          "interval": 5,
+          "message": "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code BQKG-JZYF to authenticate."
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let deviceCode = try JSONDecoder().decode(DeviceCodeResponse.self, from: data)
+
+        #expect(deviceCode.deviceCode == "BAQABAAEAAAAm-06blBE1TpVMil8KPQ41hF...")
+        #expect(deviceCode.userCode == "BQKG-JZYF")
+        #expect(deviceCode.verificationUri == "https://microsoft.com/devicelogin")
+        #expect(deviceCode.expiresIn == 900)
+        #expect(deviceCode.interval == 5)
+        #expect(deviceCode.message.contains("BQKG-JZYF"))
+    }
+
+    @Test("AuthError has meaningful descriptions for all cases")
+    func authErrorDescriptions() {
+        let errors: [AuthError] = [
+            .declined,
+            .expired,
+            .oauthError("invalid_grant", "Invalid credentials"),
+            .noRefreshToken,
+            .notAuthenticated,
+        ]
+
+        for error in errors {
+            #expect(error.errorDescription != nil)
+            #expect(!error.errorDescription!.isEmpty)
+        }
+    }
+
+    @Test("AuthError descriptions contain relevant details")
+    func authErrorDescriptionsContent() {
+        let oauthError = AuthError.oauthError("invalid_grant", "Token expired")
+        #expect(oauthError.errorDescription?.contains("invalid_grant") == true)
+        #expect(oauthError.errorDescription?.contains("Token expired") == true)
+
+        let declined = AuthError.declined
+        #expect(declined.errorDescription?.contains("declined") == true)
+
+        let expired = AuthError.expired
+        #expect(expired.errorDescription?.contains("expired") == true)
+    }
+
+    // MARK: - GraphError Additional Tests
+
+    @Test("All GraphError cases have non-nil errorDescription")
+    func graphErrorAllCasesHaveDescriptions() {
+        let errors: [GraphError] = [
+            .invalidResponse,
+            .unauthorized,
+            .forbidden,
+            .notFound,
+            .rateLimited,
+            .serverError(500),
+            .serverError(503),
+            .httpError(400, "Bad Request"),
+            .httpError(418, "I'm a teapot"),
+        ]
+
+        for error in errors {
+            #expect(error.errorDescription != nil, "GraphError case should have errorDescription: \(error)")
+            #expect(!error.errorDescription!.isEmpty, "GraphError description should not be empty: \(error)")
+        }
+    }
+
+    @Test("GraphError httpError includes status code and body in description")
+    func graphErrorHttpErrorDetails() {
+        let error = GraphError.httpError(418, "I'm a teapot - short and stout")
+        let description = error.errorDescription!
+
+        #expect(description.contains("418"))
+        #expect(description.contains("I'm a teapot - short and stout"))
+    }
+
+    @Test("GraphError serverError includes status code in description")
+    func graphErrorServerErrorDetails() {
+        let error500 = GraphError.serverError(500)
+        #expect(error500.errorDescription?.contains("500") == true)
+
+        let error503 = GraphError.serverError(503)
+        #expect(error503.errorDescription?.contains("503") == true)
+    }
 }
 
 struct TestItem: Decodable {
     let id: String
+}
+
+// MARK: - GraphQuery Tests
+
+@Suite("GraphQuery Tests")
+struct GraphQueryTests {
+    @Test("Empty query builder produces empty dictionary")
+    func emptyBuilder() {
+        let query = GraphQuery()
+        let params = query.build()
+        #expect(params.isEmpty)
+    }
+
+    @Test("Select adds $select parameter with single field")
+    func selectSingleField() {
+        let query = GraphQuery().select("id")
+        let params = query.build()
+        #expect(params["$select"] == "id")
+    }
+
+    @Test("Select with multiple fields joins with comma")
+    func selectMultipleFields() {
+        let query = GraphQuery().select("id", "subject", "from")
+        let params = query.build()
+        #expect(params["$select"] == "id,subject,from")
+    }
+
+    @Test("Multiple select calls append fields")
+    func selectChaining() {
+        let query = GraphQuery()
+            .select("id", "subject")
+            .select("from", "receivedDateTime")
+        let params = query.build()
+        #expect(params["$select"] == "id,subject,from,receivedDateTime")
+    }
+
+    @Test("Filter adds $filter parameter")
+    func filterExpression() {
+        let query = GraphQuery().filter("receivedDateTime ge 2024-01-01")
+        let params = query.build()
+        #expect(params["$filter"] == "receivedDateTime ge 2024-01-01")
+    }
+
+    @Test("OrderBy adds $orderby parameter ascending by default")
+    func orderByAscending() {
+        let query = GraphQuery().orderBy("receivedDateTime")
+        let params = query.build()
+        #expect(params["$orderby"] == "receivedDateTime")
+    }
+
+    @Test("OrderBy with descending appends desc")
+    func orderByDescending() {
+        let query = GraphQuery().orderBy("receivedDateTime", descending: true)
+        let params = query.build()
+        #expect(params["$orderby"] == "receivedDateTime desc")
+    }
+
+    @Test("Multiple orderBy calls comma-separate")
+    func orderByMultiple() {
+        let query = GraphQuery()
+            .orderBy("importance", descending: true)
+            .orderBy("receivedDateTime")
+        let params = query.build()
+        #expect(params["$orderby"] == "importance desc,receivedDateTime")
+    }
+
+    @Test("Top adds $top parameter")
+    func topLimit() {
+        let query = GraphQuery().top(25)
+        let params = query.build()
+        #expect(params["$top"] == "25")
+    }
+
+    @Test("Skip adds $skip parameter")
+    func skipOffset() {
+        let query = GraphQuery().skip(50)
+        let params = query.build()
+        #expect(params["$skip"] == "50")
+    }
+
+    @Test("Search wraps value in escaped quotes")
+    func searchQuoting() {
+        let query = GraphQuery().search("meeting notes")
+        let params = query.build()
+        #expect(params["$search"] == "\"meeting notes\"")
+    }
+
+    @Test("Expand adds $expand parameter")
+    func expandField() {
+        let query = GraphQuery().expand("attachments")
+        let params = query.build()
+        #expect(params["$expand"] == "attachments")
+    }
+
+    @Test("Count with true sets $count to true")
+    func countTrue() {
+        let query = GraphQuery().count(true)
+        let params = query.build()
+        #expect(params["$count"] == "true")
+    }
+
+    @Test("Count with false sets $count to false")
+    func countFalse() {
+        let query = GraphQuery().count(false)
+        let params = query.build()
+        #expect(params["$count"] == "false")
+    }
+
+    @Test("Count defaults to true")
+    func countDefault() {
+        let query = GraphQuery().count()
+        let params = query.build()
+        #expect(params["$count"] == "true")
+    }
+
+    @Test("Chaining multiple methods produces correct query")
+    func complexChaining() {
+        let query = GraphQuery()
+            .select("id", "subject", "from")
+            .filter("isRead eq false")
+            .orderBy("receivedDateTime", descending: true)
+            .top(10)
+            .count()
+        let params = query.build()
+
+        #expect(params["$select"] == "id,subject,from")
+        #expect(params["$filter"] == "isRead eq false")
+        #expect(params["$orderby"] == "receivedDateTime desc")
+        #expect(params["$top"] == "10")
+        #expect(params["$count"] == "true")
+        #expect(params.count == 5)
+    }
+
+    @Test("Realistic email query scenario")
+    func realisticEmailQuery() {
+        let query = GraphQuery()
+            .select("id", "subject", "from", "receivedDateTime", "bodyPreview")
+            .filter("receivedDateTime ge 2024-01-01T00:00:00Z")
+            .search("project status")
+            .orderBy("receivedDateTime", descending: true)
+            .top(25)
+        let params = query.build()
+
+        #expect(params["$select"] == "id,subject,from,receivedDateTime,bodyPreview")
+        #expect(params["$filter"] == "receivedDateTime ge 2024-01-01T00:00:00Z")
+        #expect(params["$search"] == "\"project status\"")
+        #expect(params["$orderby"] == "receivedDateTime desc")
+        #expect(params["$top"] == "25")
+    }
+
+    @Test("Realistic calendar query scenario")
+    func realisticCalendarQuery() {
+        let query = GraphQuery()
+            .select("id", "subject", "start", "end", "location")
+            .filter("start/dateTime ge '2024-02-01T00:00:00'")
+            .orderBy("start/dateTime")
+            .expand("attendees")
+            .top(50)
+        let params = query.build()
+
+        #expect(params["$select"] == "id,subject,start,end,location")
+        #expect(params["$filter"] == "start/dateTime ge '2024-02-01T00:00:00'")
+        #expect(params["$orderby"] == "start/dateTime")
+        #expect(params["$expand"] == "attendees")
+        #expect(params["$top"] == "50")
+    }
+
+    @Test("Pagination scenario with skip and top")
+    func paginationScenario() {
+        let query = GraphQuery()
+            .select("id", "displayName")
+            .skip(100)
+            .top(50)
+            .orderBy("displayName")
+        let params = query.build()
+
+        #expect(params["$select"] == "id,displayName")
+        #expect(params["$skip"] == "100")
+        #expect(params["$top"] == "50")
+        #expect(params["$orderby"] == "displayName")
+    }
 }
