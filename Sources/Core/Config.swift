@@ -26,18 +26,18 @@ public struct FlokConfig: Sendable {
         apiVersion: String? = nil
     ) {
         self.clientId = clientId
-            ?? ProcessInfo.processInfo.environment["PIGEON_CLIENT_ID"]
+            ?? ProcessInfo.processInfo.environment["FLOK_CLIENT_ID"]
             ?? ""
         self.tenantId = tenantId
-            ?? ProcessInfo.processInfo.environment["PIGEON_TENANT_ID"]
+            ?? ProcessInfo.processInfo.environment["FLOK_TENANT_ID"]
             ?? "common"
         self.account = account
-            ?? ProcessInfo.processInfo.environment["PIGEON_ACCOUNT"]
+            ?? ProcessInfo.processInfo.environment["FLOK_ACCOUNT"]
             ?? "default"
         self.readOnly = readOnly
-            || ProcessInfo.processInfo.environment["PIGEON_READ_ONLY"] == "true"
+            || ProcessInfo.processInfo.environment["FLOK_READ_ONLY"] == "true"
         self.apiVersion = apiVersion
-            ?? ProcessInfo.processInfo.environment["PIGEON_API_VERSION"]
+            ?? ProcessInfo.processInfo.environment["FLOK_API_VERSION"]
             ?? "v1.0"
     }
 }

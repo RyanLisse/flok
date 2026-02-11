@@ -41,10 +41,10 @@ struct Flok {
             break
         }
 
-        // All other commands require PIGEON_CLIENT_ID
+        // All other commands require FLOK_CLIENT_ID
         let config = FlokConfig()
         guard !config.clientId.isEmpty else {
-            print("Error: PIGEON_CLIENT_ID is required.")
+            print("Error: FLOK_CLIENT_ID is required.")
             print("Set it via environment variable or register an Azure AD app.")
             print("See: https://github.com/RyanLisse/Flok#setup")
             Foundation.exit(1)
@@ -223,10 +223,10 @@ struct Flok {
           help                         Show this help
 
         ENVIRONMENT:
-          PIGEON_CLIENT_ID    Azure AD app client ID (required)
-          PIGEON_TENANT_ID    Azure AD tenant ID (default: common)
-          PIGEON_READ_ONLY    Disable write operations (true/false)
-          PIGEON_ACCOUNT      Account name for multi-account support
+          FLOK_CLIENT_ID    Azure AD app client ID (required)
+          FLOK_TENANT_ID    Azure AD tenant ID (default: common)
+          FLOK_READ_ONLY    Disable write operations (true/false)
+          FLOK_ACCOUNT      Account name for multi-account support
 
         EXAMPLES:
           flok mail send --to user@example.com --subject "Hello" --body "Test message"

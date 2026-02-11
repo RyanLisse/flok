@@ -14,21 +14,12 @@ import MCP
 /// - Read-only mode support
 public struct FlokMCPServer: Sendable {
     let config: FlokConfig
-    let tokenManager: TokenManager
-    let graphClient: GraphClient
+    let ctx: FlokContext
     let server: Server
 
     public init(config: FlokConfig) {
         self.config = config
-        self.tokenManager = TokenManager(
-            clientId: config.clientId,
-            tenantId: config.tenantId,
-            account: config.account
-        )
-        self.graphClient = GraphClient(
-            tokenProvider: tokenManager,
-            apiVersion: config.apiVersion
-        )
+        self.ctx = FlokContext(config: config)
 
         // Create MCP server with all capabilities
         self.server = Server(
@@ -306,7 +297,7 @@ public struct FlokMCPServer: Sendable {
                 switch params.name {
                 // Mail tools
                 case "list-mail":
-                    let handler = ListMailHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = ListMailHandler(mailService: ctx.mailService, readOnly: config.readOnly)
                     let folder = params.arguments?["folder"]?.stringValue ?? "inbox"
                     let top = params.arguments?["top"]?.intValue ?? 25
                     let filter = params.arguments?["filter"]?.stringValue
@@ -316,7 +307,7 @@ public struct FlokMCPServer: Sendable {
                     guard let messageId = params.arguments?["messageId"]?.stringValue else {
                         return .init(content: [.text("Missing required parameter: messageId")], isError: true)
                     }
-                    let handler = ReadMailHandler(client: graphClient)
+                    let handler = ReadMailHandler(mailService: ctx.mailService)
                     result = try await handler.handle(messageId: messageId)
 
                 case "send-mail":
@@ -327,7 +318,7 @@ public struct FlokMCPServer: Sendable {
                     }
                     let cc = params.arguments?["cc"]?.arrayValue?.compactMap({ $0.stringValue }) ?? []
                     let isHTML = params.arguments?["isHTML"]?.boolValue ?? false
-                    let handler = SendMailHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = SendMailHandler(mailService: ctx.mailService, readOnly: config.readOnly)
                     result = try await handler.handle(to: to, subject: subject, body: body, cc: cc, isHTML: isHTML)
 
                 case "reply-mail":
@@ -335,7 +326,7 @@ public struct FlokMCPServer: Sendable {
                           let comment = params.arguments?["comment"]?.stringValue else {
                         return .init(content: [.text("Missing required parameters: messageId, comment")], isError: true)
                     }
-                    let handler = ReplyMailHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = ReplyMailHandler(mailService: ctx.mailService, readOnly: config.readOnly)
                     result = try await handler.handle(messageId: messageId, comment: comment)
 
                 case "search-mail":
@@ -343,7 +334,7 @@ public struct FlokMCPServer: Sendable {
                         return .init(content: [.text("Missing required parameter: query")], isError: true)
                     }
                     let top = params.arguments?["top"]?.intValue ?? 25
-                    let handler = SearchMailHandler(client: graphClient)
+                    let handler = SearchMailHandler(mailService: ctx.mailService)
                     result = try await handler.handle(query: query, top: top)
 
                 case "move-mail":
@@ -351,14 +342,14 @@ public struct FlokMCPServer: Sendable {
                           let destinationFolder = params.arguments?["destinationFolder"]?.stringValue else {
                         return .init(content: [.text("Missing required parameters: messageId, destinationFolder")], isError: true)
                     }
-                    let handler = MoveMailHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = MoveMailHandler(mailService: ctx.mailService, readOnly: config.readOnly)
                     result = try await handler.handle(messageId: messageId, destinationFolder: destinationFolder)
 
                 case "delete-mail":
                     guard let messageId = params.arguments?["messageId"]?.stringValue else {
                         return .init(content: [.text("Missing required parameter: messageId")], isError: true)
                     }
-                    let handler = DeleteMailHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = DeleteMailHandler(mailService: ctx.mailService, readOnly: config.readOnly)
                     result = try await handler.handle(messageId: messageId)
 
                 // Calendar tools
@@ -368,14 +359,14 @@ public struct FlokMCPServer: Sendable {
                         return .init(content: [.text("Missing required parameters: startDate, endDate")], isError: true)
                     }
                     let top = params.arguments?["top"]?.intValue ?? 25
-                    let handler = ListEventsHandler(client: graphClient)
+                    let handler = ListEventsHandler(calendarService: ctx.calendarService)
                     result = try await handler.handle(startDate: startDate, endDate: endDate, top: top)
 
                 case "get-event":
                     guard let eventId = params.arguments?["eventId"]?.stringValue else {
                         return .init(content: [.text("Missing required parameter: eventId")], isError: true)
                     }
-                    let handler = GetEventHandler(client: graphClient)
+                    let handler = GetEventHandler(calendarService: ctx.calendarService)
                     result = try await handler.handle(eventId: eventId)
 
                 case "create-event":
@@ -392,7 +383,7 @@ public struct FlokMCPServer: Sendable {
                     let attendees = params.arguments?["attendees"]?.arrayValue?.compactMap({ $0.stringValue }) ?? []
                     let body = params.arguments?["body"]?.stringValue
                     let isAllDay = params.arguments?["isAllDay"]?.boolValue ?? false
-                    let handler = CreateEventHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = CreateEventHandler(calendarService: ctx.calendarService, readOnly: config.readOnly)
                     result = try await handler.handle(
                         subject: subject,
                         start: DateTimeTimeZone(dateTime: startDateTime, timeZone: startTimeZone),
@@ -409,7 +400,7 @@ public struct FlokMCPServer: Sendable {
                         return .init(content: [.text("Missing required parameters: eventId, response")], isError: true)
                     }
                     let comment = params.arguments?["comment"]?.stringValue
-                    let handler = RespondEventHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = RespondEventHandler(calendarService: ctx.calendarService, readOnly: config.readOnly)
                     result = try await handler.handle(eventId: eventId, response: response, comment: comment)
 
                 case "check-availability":
@@ -419,21 +410,21 @@ public struct FlokMCPServer: Sendable {
                         return .init(content: [.text("Missing required parameters: attendees, startTime, endTime")], isError: true)
                     }
                     let timeZone = params.arguments?["timeZone"]?.stringValue ?? "UTC"
-                    let handler = CheckAvailabilityHandler(client: graphClient)
+                    let handler = CheckAvailabilityHandler(calendarService: ctx.calendarService)
                     result = try await handler.handle(emails: attendees, start: startTime, end: endTime, timeZone: timeZone)
 
                 // Contact tools
                 case "list-contacts":
                     let top = params.arguments?["top"]?.intValue ?? 50
                     let search = params.arguments?["search"]?.stringValue
-                    let handler = ListContactsHandler(client: graphClient)
+                    let handler = ListContactsHandler(contactService: ctx.contactService)
                     result = try await handler.handle(top: top, search: search)
 
                 case "get-contact":
                     guard let contactId = params.arguments?["contactId"]?.stringValue else {
                         return .init(content: [.text("Missing required parameter: contactId")], isError: true)
                     }
-                    let handler = GetContactHandler(client: graphClient)
+                    let handler = GetContactHandler(contactService: ctx.contactService)
                     result = try await handler.handle(contactId: contactId)
 
                 case "create-contact":
@@ -445,7 +436,7 @@ public struct FlokMCPServer: Sendable {
                     let phone = params.arguments?["phone"]?.stringValue
                     let company = params.arguments?["companyName"]?.stringValue
                     let jobTitle = params.arguments?["jobTitle"]?.stringValue
-                    let handler = CreateContactHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = CreateContactHandler(contactService: ctx.contactService, readOnly: config.readOnly)
                     result = try await handler.handle(
                         givenName: displayName,
                         surname: nil,
@@ -459,14 +450,14 @@ public struct FlokMCPServer: Sendable {
                 case "list-files":
                     let path = params.arguments?["path"]?.stringValue ?? ""
                     let top = params.arguments?["top"]?.intValue ?? 50
-                    let handler = ListFilesHandler(client: graphClient)
+                    let handler = ListFilesHandler(driveService: ctx.driveService)
                     result = try await handler.handle(path: path, top: top)
 
                 case "get-file":
                     guard let itemId = params.arguments?["itemId"]?.stringValue else {
                         return .init(content: [.text("Missing required parameter: itemId")], isError: true)
                     }
-                    let handler = GetFileHandler(client: graphClient)
+                    let handler = GetFileHandler(driveService: ctx.driveService)
                     result = try await handler.handle(itemId: itemId)
 
                 case "search-files":
@@ -474,7 +465,7 @@ public struct FlokMCPServer: Sendable {
                         return .init(content: [.text("Missing required parameter: query")], isError: true)
                     }
                     let top = params.arguments?["top"]?.intValue ?? 50
-                    let handler = SearchFilesHandler(client: graphClient)
+                    let handler = SearchFilesHandler(driveService: ctx.driveService)
                     result = try await handler.handle(query: query, top: top)
 
                 // Graph API escape hatch
@@ -490,7 +481,7 @@ public struct FlokMCPServer: Sendable {
                     let headers = params.arguments?["headers"]?.objectValue?.reduce(into: [String: String]()) { dict, pair in
                         if let val = pair.value.stringValue { dict[pair.key] = val }
                     } ?? [:]
-                    let handler = GraphAPIHandler(client: graphClient, readOnly: config.readOnly)
+                    let handler = GraphAPIHandler(client: ctx.graphClient, readOnly: config.readOnly)
                     result = try await handler.handle(method: method, path: path, query: query, body: body, headers: headers)
 
                 default:
@@ -507,7 +498,7 @@ public struct FlokMCPServer: Sendable {
 
     /// Register resource handlers.
     private func registerResourceHandlers() async {
-        let resources = FlokResources(client: graphClient)
+        let resources = FlokResources(client: ctx.graphClient)
 
         await server.withMethodHandler(ListResources.self) { _ in
             return .init(resources: [
@@ -526,23 +517,42 @@ public struct FlokMCPServer: Sendable {
                     uri: "flok://me/profile",
                     description: "Current user profile information"
                 ),
+                Resource(
+                    name: "Context",
+                    uri: "flok://context",
+                    description: "Account and folder context (context.md) for agent awareness"
+                ),
             ])
         }
 
-        await server.withMethodHandler(ReadResource.self) { [resources] params in
+        let contextFileURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".flok", isDirectory: true)
+            .appendingPathComponent("context.md", isDirectory: false)
+
+        await server.withMethodHandler(ReadResource.self) { [resources, contextFileURL] params in
             do {
                 let content: String
+                let mimeType: String
                 switch params.uri {
                 case "flok://inbox/summary":
                     content = try await resources.inboxSummary()
+                    mimeType = "application/json"
                 case "flok://calendar/today":
                     content = try await resources.calendarToday()
+                    mimeType = "application/json"
                 case "flok://me/profile":
                     content = try await resources.userProfile()
+                    mimeType = "application/json"
+                case "flok://context":
+                    content = try await resources.contextMarkdown()
+                    mimeType = "text/markdown"
+                    // Persist for next time
+                    try? FileManager.default.createDirectory(at: contextFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try? content.write(to: contextFileURL, atomically: true, encoding: .utf8)
                 default:
                     throw MCPError.invalidParams("Unknown resource URI: \(params.uri)")
                 }
-                return .init(contents: [Resource.Content.text(content, uri: params.uri, mimeType: "application/json")])
+                return .init(contents: [Resource.Content.text(content, uri: params.uri, mimeType: mimeType)])
             } catch {
                 throw MCPError.internalError("Failed to read resource: \(error.localizedDescription)")
             }
@@ -608,6 +618,9 @@ public struct FlokMCPServer: Sendable {
             if let nextActions = result.nextActions {
                 content += "\n\n[Next actions: \(nextActions.joined(separator: ", "))]"
             }
+            if let level = result.approvalLevel {
+                content += "\n[Approval: \(level)]"
+            }
             return .init(content: [.text(content)], isError: false)
         } else {
             return .init(content: [.text(result.error ?? "Unknown error")], isError: true)
@@ -617,18 +630,20 @@ public struct FlokMCPServer: Sendable {
 
 // MARK: - Tool Result with Completion Signal
 
-/// Standard tool result with completion signal for agents.
+/// Standard tool result with completion signal and optional approval metadata for agents.
 public struct ToolResult: Codable, Sendable {
     public let success: Bool
     public let data: String?
     public let error: String?
     public let nextActions: [String]?
+    /// Approval level for MCP clients: "auto" (read operations) or "explicit" (write operations).
+    public let approvalLevel: String?
 
-    public static func ok(_ data: String, nextActions: [String] = []) -> ToolResult {
-        ToolResult(success: true, data: data, error: nil, nextActions: nextActions.isEmpty ? nil : nextActions)
+    public static func ok(_ data: String, nextActions: [String] = [], approvalLevel: String? = nil) -> ToolResult {
+        ToolResult(success: true, data: data, error: nil, nextActions: nextActions.isEmpty ? nil : nextActions, approvalLevel: approvalLevel)
     }
 
     public static func fail(_ error: String) -> ToolResult {
-        ToolResult(success: false, data: nil, error: error, nextActions: nil)
+        ToolResult(success: false, data: nil, error: error, nextActions: nil, approvalLevel: nil)
     }
 }

@@ -58,7 +58,7 @@ cd Flok
 swift build
 
 # Set your client ID
-export PIGEON_CLIENT_ID="your-app-client-id"
+export FLOK_CLIENT_ID="your-app-client-id"
 
 # Login (opens browser for device code)
 flok auth login
@@ -86,7 +86,7 @@ Add to your MCP client config:
       "command": "/path/to/flok",
       "args": ["serve"],
       "env": {
-        "PIGEON_CLIENT_ID": "your-client-id"
+        "FLOK_CLIENT_ID": "your-client-id"
       }
     }
   }
@@ -123,17 +123,17 @@ Add to your MCP client config:
 - **MCP Prompts** — Composable workflows: triage-inbox, schedule-meeting, draft-and-review, daily-briefing, contact-lookup
 - **Escape Hatch** — `graph-api` tool calls ANY Graph endpoint directly
 - **Completion Signals** — Every tool result includes `nextActions` suggestions
-- **Read-Only Mode** — Set `PIGEON_READ_ONLY=true` to disable all write operations
+- **Read-Only Mode** — Set `FLOK_READ_ONLY=true` to disable all write operations
 
 ## Configuration
 
 | Setting | CLI | Env Var | Default |
 |---------|-----|---------|---------|
-| Client ID | — | `PIGEON_CLIENT_ID` | (required) |
-| Tenant ID | — | `PIGEON_TENANT_ID` | `common` |
-| Account | — | `PIGEON_ACCOUNT` | `default` |
-| Read-only | — | `PIGEON_READ_ONLY` | `false` |
-| API version | — | `PIGEON_API_VERSION` | `v1.0` |
+| Client ID | — | `FLOK_CLIENT_ID` | (required) |
+| Tenant ID | — | `FLOK_TENANT_ID` | `common` |
+| Account | — | `FLOK_ACCOUNT` | `default` |
+| Read-only | — | `FLOK_READ_ONLY` | `false` |
+| API version | — | `FLOK_API_VERSION` | `v1.0` |
 
 ## Required Azure Permissions
 

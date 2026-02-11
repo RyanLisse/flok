@@ -37,6 +37,7 @@ public struct GraphAPIHandler: Sendable {
         }
 
         let bodyData = body?.data(using: .utf8)
+        let isRead = (method.uppercased() == "GET")
         let data = try await client.raw(
             method: httpMethod,
             path: path,
@@ -44,6 +45,7 @@ public struct GraphAPIHandler: Sendable {
             body: bodyData,
             headers: headers
         )
-        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: [])
+        let approvalLevel: String? = isRead ? "auto" : "explicit"
+        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: [], approvalLevel: approvalLevel)
     }
 }

@@ -32,7 +32,7 @@ Executable → CLI → Core
 - **Handler pattern** for MCP tools: each file in `Sources/MCP/Tools/` registers tools for one domain (mail, calendar, contacts, drive, graph escape hatch)
 - **Provider pattern** for Graph API: `GraphClient` handles HTTP, retry, pagination; auth via `TokenProvider` protocol
 - **Keychain-first** token storage with `TokenManager` coordinating `DeviceCodeFlow` + `KeychainTokenStorage`
-- All env vars use `PIGEON_` prefix (e.g., `PIGEON_CLIENT_ID`, `PIGEON_READ_ONLY`)
+- All env vars use `FLOK_` prefix (e.g., `FLOK_CLIENT_ID`, `FLOK_READ_ONLY`)
 
 ## Swift Settings
 

@@ -172,7 +172,7 @@ public struct ContactListCommand {
         print("👥 Contacts (\(contacts.count)):")
         for c in contacts {
             let name = c.displayName ?? "(no name)"
-            let emails = c.emailAddresses?.map(\.address).joined(separator: ", ") ?? ""
+            let emails = (c.emailAddresses?.map(\.address) ?? []).joined(separator: ", ")
             let phone = c.mobilePhone ?? ""
             let company = c.companyName ?? ""
             var line = "  📇 \(name)"
@@ -232,6 +232,39 @@ public struct ServeCommand {
     public static func run(config: FlokConfig) async throws {
         let mcpServer = FlokMCPServer(config: config)
         try await mcpServer.start()
+    }
+}
+
+/// CLI entry: `flok accounts` — List authenticated accounts.
+public struct AccountsCommand {
+    public static func run() {
+        let manager = AccountManager()
+        let accounts = manager.listAccounts()
+        if accounts.isEmpty {
+            print("No accounts. Run `flok auth login`.")
+            return
+        }
+        print("Authenticated accounts:")
+        for a in accounts {
+            print("  • \(a.id)")
+        }
+        if let current = manager.getDefaultAccount() {
+            print("Current: \(current)")
+        }
+    }
+}
+
+/// CLI entry: `flok switch <account>` — Set default account.
+public struct SwitchCommand {
+    public static func run(accountId: String) throws {
+        let manager = AccountManager()
+        let ids = manager.listAccounts().map(\.id)
+        guard ids.contains(accountId) else {
+            print("Error: Account '\(accountId)' not found. Use `flok accounts` to list.")
+            return
+        }
+        try manager.setDefaultAccount(accountId)
+        print("Switched to account: \(accountId)")
     }
 }
 

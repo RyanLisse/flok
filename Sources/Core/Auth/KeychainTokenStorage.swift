@@ -62,6 +62,30 @@ public struct KeychainTokenStorage: Sendable {
             delete(key: key, account: account)
         }
     }
+
+    /// List all account IDs that have at least one key stored (e.g. access_token).
+    public func listAccountIDs() -> [String] {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: Self.service,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess,
+              let items = result as? [[String: Any]] else {
+            return []
+        }
+        let ids = items.compactMap { item -> String? in
+            guard let account = item[kSecAttrAccount as String] as? String else { return nil }
+            if let firstDot = account.firstIndex(of: ".") {
+                return String(account[..<firstDot])
+            }
+            return nil
+        }
+        return Array(Set(ids)).sorted()
+    }
 }
 
 public enum KeychainError: Error, LocalizedError {

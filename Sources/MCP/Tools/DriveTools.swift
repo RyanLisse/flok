@@ -4,36 +4,31 @@ import Core
 // MARK: - OneDrive Tool Handlers
 
 public struct ListFilesHandler: Sendable {
-    let client: GraphClient
+    let driveService: DriveService
 
     public func handle(path: String = "", top: Int = 50) async throws -> ToolResult {
-        let endpoint = path.isEmpty
-            ? "/me/drive/root/children"
-            : "/me/drive/root:/\(path):/children"
-        let data = try await client.get(endpoint, query: [
-            "$top": String(top),
-            "$select": "id,name,size,webUrl,folder,file,lastModifiedDateTime",
-        ])
-        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: ["list-files", "get-file"])
+        let items = try await driveService.listChildren(path: path, top: top)
+        let data = try JSONEncoder.graph.encode(items)
+        return .ok(String(data: data, encoding: .utf8) ?? "[]", nextActions: ["list-files", "get-file"], approvalLevel: "auto")
     }
 }
 
 public struct GetFileHandler: Sendable {
-    let client: GraphClient
+    let driveService: DriveService
 
     public func handle(itemId: String) async throws -> ToolResult {
-        let data = try await client.get("/me/drive/items/\(itemId)")
-        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: ["list-files"])
+        let item = try await driveService.getItem(id: itemId)
+        let data = try JSONEncoder.graph.encode(item)
+        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: ["list-files"], approvalLevel: "auto")
     }
 }
 
 public struct SearchFilesHandler: Sendable {
-    let client: GraphClient
+    let driveService: DriveService
 
     public func handle(query: String, top: Int = 50) async throws -> ToolResult {
-        let data = try await client.get("/me/drive/root/search(q='\(query)')", query: [
-            "$top": String(top)
-        ])
-        return .ok(String(data: data, encoding: .utf8) ?? "", nextActions: ["get-file"])
+        let items = try await driveService.searchFiles(query: query, top: top)
+        let data = try JSONEncoder.graph.encode(items)
+        return .ok(String(data: data, encoding: .utf8) ?? "[]", nextActions: ["get-file"], approvalLevel: "auto")
     }
 }

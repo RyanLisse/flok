@@ -551,10 +551,10 @@ struct GraphClientTests {
         #expect(config.readOnly == false)
     }
 
-    @Test("FlokConfig readOnly is true when PIGEON_READ_ONLY env is true")
+    @Test("FlokConfig readOnly is true when FLOK_READ_ONLY env is true")
     func flokConfigReadOnlyEnvVar() {
         // Save original env value
-        let originalValue = ProcessInfo.processInfo.environment["PIGEON_READ_ONLY"]
+        let originalValue = ProcessInfo.processInfo.environment["FLOK_READ_ONLY"]
 
         // We can't actually set env vars in tests, so we test the logic by passing explicit readOnly
         let configExplicit = FlokConfig(readOnly: true)
@@ -563,10 +563,10 @@ struct GraphClientTests {
         // Test that explicit false is respected when no env var
         let configExplicitFalse = FlokConfig(readOnly: false)
 
-        // If PIGEON_READ_ONLY env is set to "true", this will be true
+        // If FLOK_READ_ONLY env is set to "true", this will be true
         // Otherwise it will be false as explicitly specified
         if originalValue == "true" {
-            #expect(configExplicitFalse.readOnly == true, "Env var PIGEON_READ_ONLY=true should override explicit false")
+            #expect(configExplicitFalse.readOnly == true, "Env var FLOK_READ_ONLY=true should override explicit false")
         } else {
             #expect(configExplicitFalse.readOnly == false, "Should use explicit false when env var not set to true")
         }

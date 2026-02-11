@@ -23,7 +23,8 @@ struct ToolHandlerTests {
     func sendMailReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = SendMailHandler(client: client, readOnly: true)
+        let mailService = MailService(client: client)
+        let handler = SendMailHandler(mailService: mailService, readOnly: true)
 
         let result = try await handler.handle(
             to: ["test@example.com"],
@@ -40,7 +41,8 @@ struct ToolHandlerTests {
     func replyMailReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = ReplyMailHandler(client: client, readOnly: true)
+        let mailService = MailService(client: client)
+        let handler = ReplyMailHandler(mailService: mailService, readOnly: true)
 
         let result = try await handler.handle(
             messageId: "test-message-id",
@@ -56,7 +58,8 @@ struct ToolHandlerTests {
     func moveMailReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = MoveMailHandler(client: client, readOnly: true)
+        let mailService = MailService(client: client)
+        let handler = MoveMailHandler(mailService: mailService, readOnly: true)
 
         let result = try await handler.handle(
             messageId: "test-message-id",
@@ -72,7 +75,8 @@ struct ToolHandlerTests {
     func deleteMailReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = DeleteMailHandler(client: client, readOnly: true)
+        let mailService = MailService(client: client)
+        let handler = DeleteMailHandler(mailService: mailService, readOnly: true)
 
         let result = try await handler.handle(messageId: "test-message-id")
 
@@ -87,7 +91,8 @@ struct ToolHandlerTests {
     func createEventReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = CreateEventHandler(client: client, readOnly: true)
+        let calendarService = CalendarService(client: client)
+        let handler = CreateEventHandler(calendarService: calendarService, readOnly: true)
 
         let start = DateTimeTimeZone(dateTime: "2026-02-11T10:00:00", timeZone: "UTC")
         let end = DateTimeTimeZone(dateTime: "2026-02-11T11:00:00", timeZone: "UTC")
@@ -107,7 +112,8 @@ struct ToolHandlerTests {
     func respondEventReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = RespondEventHandler(client: client, readOnly: true)
+        let calendarService = CalendarService(client: client)
+        let handler = RespondEventHandler(calendarService: calendarService, readOnly: true)
 
         let result = try await handler.handle(
             eventId: "test-event-id",
@@ -123,8 +129,8 @@ struct ToolHandlerTests {
     func respondEventInvalidResponse() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        // Test with readOnly=false to ensure validation happens BEFORE read-only check
-        let handler = RespondEventHandler(client: client, readOnly: false)
+        let calendarService = CalendarService(client: client)
+        let handler = RespondEventHandler(calendarService: calendarService, readOnly: false)
 
         let result = try await handler.handle(
             eventId: "test-event-id",
@@ -140,7 +146,8 @@ struct ToolHandlerTests {
     func respondEventValidResponseOptions() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = RespondEventHandler(client: client, readOnly: false)
+        let calendarService = CalendarService(client: client)
+        let handler = RespondEventHandler(calendarService: calendarService, readOnly: false)
 
         // Test various invalid responses
         let invalidResponses = ["maybe", "confirm", "reject", "unknown", ""]
@@ -162,15 +169,16 @@ struct ToolHandlerTests {
     func createContactReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
-        let handler = CreateContactHandler(client: client, readOnly: true)
+        let contactService = ContactService(client: client)
+        let handler = CreateContactHandler(contactService: contactService, readOnly: true)
 
         let result = try await handler.handle(
             givenName: "Test",
             surname: "User",
             email: "test@example.com",
-            phone: nil,
-            company: nil,
-            jobTitle: nil
+            phone: nil as String?,
+            company: nil as String?,
+            jobTitle: nil as String?
         )
 
         #expect(result.success == false)
@@ -311,44 +319,47 @@ struct ToolHandlerTests {
     func allWriteOperationsFailInReadOnlyMode() async throws {
         let tokenProvider = MockTokenProvider()
         let client = GraphClient(tokenProvider: tokenProvider)
+        let mailService = MailService(client: client)
+        let calendarService = CalendarService(client: client)
+        let contactService = ContactService(client: client)
 
         // Mail operations
-        let sendMail = SendMailHandler(client: client, readOnly: true)
+        let sendMail = SendMailHandler(mailService: mailService, readOnly: true)
         let sendResult = try await sendMail.handle(to: ["test@example.com"], subject: "Test", body: "Body")
         #expect(sendResult.success == false)
 
-        let replyMail = ReplyMailHandler(client: client, readOnly: true)
+        let replyMail = ReplyMailHandler(mailService: mailService, readOnly: true)
         let replyResult = try await replyMail.handle(messageId: "123", comment: "Reply")
         #expect(replyResult.success == false)
 
-        let moveMail = MoveMailHandler(client: client, readOnly: true)
+        let moveMail = MoveMailHandler(mailService: mailService, readOnly: true)
         let moveResult = try await moveMail.handle(messageId: "123", destinationFolder: "Archive")
         #expect(moveResult.success == false)
 
-        let deleteMail = DeleteMailHandler(client: client, readOnly: true)
+        let deleteMail = DeleteMailHandler(mailService: mailService, readOnly: true)
         let deleteResult = try await deleteMail.handle(messageId: "123")
         #expect(deleteResult.success == false)
 
         // Calendar operations
-        let createEvent = CreateEventHandler(client: client, readOnly: true)
+        let createEvent = CreateEventHandler(calendarService: calendarService, readOnly: true)
         let start = DateTimeTimeZone(dateTime: "2026-02-11T10:00:00", timeZone: "UTC")
         let end = DateTimeTimeZone(dateTime: "2026-02-11T11:00:00", timeZone: "UTC")
         let createResult = try await createEvent.handle(subject: "Test", start: start, end: end)
         #expect(createResult.success == false)
 
-        let respondEvent = RespondEventHandler(client: client, readOnly: true)
+        let respondEvent = RespondEventHandler(calendarService: calendarService, readOnly: true)
         let respondResult = try await respondEvent.handle(eventId: "123", response: "accept")
         #expect(respondResult.success == false)
 
         // Contact operations
-        let createContact = CreateContactHandler(client: client, readOnly: true)
+        let createContact = CreateContactHandler(contactService: contactService, readOnly: true)
         let contactResult = try await createContact.handle(
             givenName: "Test",
-            surname: nil,
-            email: nil,
-            phone: nil,
-            company: nil,
-            jobTitle: nil
+            surname: nil as String?,
+            email: nil as String?,
+            phone: nil as String?,
+            company: nil as String?,
+            jobTitle: nil as String?
         )
         #expect(contactResult.success == false)
 
