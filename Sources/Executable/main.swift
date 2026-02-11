@@ -4,25 +4,11 @@ import CLI
 
 // MARK: - Flok Entry Point
 
-/// Usage:
-///   flok auth login          — Authenticate with Microsoft
-///   flok auth logout         — Clear stored tokens
-///   flok auth status         — Check auth status
-///   flok mail list           — List inbox messages
-///   flok serve               — Start MCP server (stdio)
-///
-/// Environment:
-///   PIGEON_CLIENT_ID     — Azure AD app client ID (required)
-///   PIGEON_TENANT_ID     — Azure AD tenant (default: common)
-///   PIGEON_READ_ONLY     — Disable write operations (default: false)
-///   PIGEON_ACCOUNT       — Account name for multi-account (default: default)
-
 @main
 struct Flok {
     @MainActor
-    static func main() async throws {
+    static func main() async {
         var args = Array(CommandLine.arguments.dropFirst())
-        let config = FlokConfig()
 
         // Parse global --output flag
         if let outputIndex = args.firstIndex(of: "--output"),
@@ -34,16 +20,8 @@ struct Flok {
                 print("Error: Invalid output format '\(outputValue)'. Use 'text' or 'json'.")
                 Foundation.exit(1)
             }
-            // Remove --output and its value from args
             args.remove(at: outputIndex + 1)
             args.remove(at: outputIndex)
-        }
-
-        guard !config.clientId.isEmpty else {
-            print("Error: PIGEON_CLIENT_ID is required.")
-            print("Set it via environment variable or register an Azure AD app.")
-            print("See: https://github.com/RyanLisse/Flok#setup")
-            Foundation.exit(1)
         }
 
         guard let command = args.first else {
@@ -51,6 +29,46 @@ struct Flok {
             return
         }
 
+        // Commands that don't require config
+        switch command {
+        case "help", "--help", "-h":
+            printUsage()
+            return
+        case "version", "--version":
+            print("Flok 0.1.0")
+            return
+        default:
+            break
+        }
+
+        // All other commands require PIGEON_CLIENT_ID
+        let config = FlokConfig()
+        guard !config.clientId.isEmpty else {
+            print("Error: PIGEON_CLIENT_ID is required.")
+            print("Set it via environment variable or register an Azure AD app.")
+            print("See: https://github.com/RyanLisse/Flok#setup")
+            Foundation.exit(1)
+        }
+
+        do {
+            try await runCommand(command, args: args, config: config)
+        } catch let error as AuthError {
+            print("Authentication error: \(error.localizedDescription)")
+            if case .notAuthenticated = error {
+                print("Run `flok auth login` to authenticate.")
+            }
+            Foundation.exit(1)
+        } catch let error as GraphError {
+            print("Graph API error: \(error.localizedDescription)")
+            Foundation.exit(1)
+        } catch {
+            print("Error: \(error.localizedDescription)")
+            Foundation.exit(1)
+        }
+    }
+
+    @MainActor
+    static func runCommand(_ command: String, args: [String], config: FlokConfig) async throws {
         switch command {
         case "auth":
             let sub = args.dropFirst().first ?? "status"
@@ -74,7 +92,7 @@ struct Flok {
             case "read":
                 guard let messageId = subArgs.first else {
                     print("Error: message ID required")
-                    break
+                    return
                 }
                 try await MailReadCommand.run(config: config, messageId: messageId)
             case "send":
@@ -85,22 +103,19 @@ struct Flok {
                       let bodyIndex = subArgs.firstIndex(of: "--body"),
                       bodyIndex + 1 < subArgs.count else {
                     print("Error: --to, --subject, and --body required")
-                    break
+                    return
                 }
-                let to = subArgs[toIndex + 1]
-                let subject = subArgs[subjIndex + 1]
-                let body = subArgs[bodyIndex + 1]
-                try await MailSendCommand.run(config: config, to: to, subject: subject, body: body)
+                try await MailSendCommand.run(config: config, to: subArgs[toIndex + 1], subject: subArgs[subjIndex + 1], body: subArgs[bodyIndex + 1])
             case "search":
                 guard let query = subArgs.first else {
                     print("Error: search query required")
-                    break
+                    return
                 }
                 try await MailSearchCommand.run(config: config, query: query)
             case "delete":
                 guard let messageId = subArgs.first else {
                     print("Error: message ID required")
-                    break
+                    return
                 }
                 try await MailDeleteCommand.run(config: config, messageId: messageId)
             default:
@@ -127,13 +142,9 @@ struct Flok {
                       let endIndex = subArgs.firstIndex(of: "--end"),
                       endIndex + 1 < subArgs.count else {
                     print("Error: --title, --start, and --end required")
-                    print("Example: flok calendar create --title 'Meeting' --start '2026-02-15T14:00:00' --end '2026-02-15T15:00:00'")
-                    break
+                    return
                 }
-                let title = subArgs[titleIndex + 1]
-                let start = subArgs[startIndex + 1]
-                let end = subArgs[endIndex + 1]
-                try await CalendarCreateCommand.run(config: config, title: title, start: start, end: end)
+                try await CalendarCreateCommand.run(config: config, title: subArgs[titleIndex + 1], start: subArgs[startIndex + 1], end: subArgs[endIndex + 1])
             default:
                 print("Unknown calendar command: \(sub)")
             }
@@ -158,12 +169,11 @@ struct Flok {
             let subArgs = Array(args.dropFirst().dropFirst())
             switch sub {
             case "list":
-                let path = subArgs.first
-                try await DriveListCommand.run(config: config, path: path)
+                try await DriveListCommand.run(config: config, path: subArgs.first)
             case "search":
                 guard let query = subArgs.first else {
                     print("Error: search query required")
-                    break
+                    return
                 }
                 try await DriveSearchCommand.run(config: config, query: query)
             default:
@@ -172,12 +182,6 @@ struct Flok {
 
         case "serve":
             try await ServeCommand.run(config: config)
-
-        case "help", "--help", "-h":
-            printUsage()
-
-        case "version", "--version":
-            print("Flok 0.1.0")
 
         default:
             print("Unknown command: \(command)")
