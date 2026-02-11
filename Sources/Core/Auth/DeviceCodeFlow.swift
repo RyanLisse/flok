@@ -27,13 +27,16 @@ public struct DeviceCodeFlow: Sendable {
 
     /// Request a device code from Azure AD.
     public func requestDeviceCode() async throws -> DeviceCodeResponse {
-        let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/devicecode")!
+        guard let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/devicecode") else {
+            throw AuthError.oauthError("invalid_tenant", "Invalid tenant ID: \(tenantId)")
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        let scopeString = scopes.joined(separator: " ")
-        let body = "client_id=\(clientId)&scope=\(scopeString)"
+        let scopeString = scopes.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encodedClientId = clientId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? clientId
+        let body = "client_id=\(encodedClientId)&scope=\(scopeString)"
         request.httpBody = body.data(using: .utf8)
 
         let (data, _) = try await URLSession.shared.data(for: request)
@@ -41,11 +44,17 @@ public struct DeviceCodeFlow: Sendable {
     }
 
     /// Poll Azure AD until the user completes authentication.
+    /// Times out after ~10 minutes (120 iterations at 5s intervals).
     public func pollForToken(deviceCode: String, interval: Int) async throws -> TokenResponse {
-        let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/token")!
-        let bodyString = "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=\(clientId)&device_code=\(deviceCode)"
+        guard let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/token") else {
+            throw AuthError.oauthError("invalid_tenant", "Invalid tenant ID: \(tenantId)")
+        }
+        let encodedClientId = clientId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? clientId
+        let encodedDeviceCode = deviceCode.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? deviceCode
+        let bodyString = "grant_type=urn:ietf:params:oauth:grant-type:device_code&client_id=\(encodedClientId)&device_code=\(encodedDeviceCode)"
 
-        while true {
+        let maxIterations = 120
+        for _ in 0..<maxIterations {
             try await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
 
             var request = URLRequest(url: url)
@@ -77,17 +86,22 @@ public struct DeviceCodeFlow: Sendable {
                 }
             }
         }
+        throw AuthError.expired
     }
 
     /// Refresh an expired access token using a refresh token.
     public func refreshToken(_ refreshToken: String) async throws -> TokenResponse {
-        let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/token")!
+        guard let url = URL(string: "https://login.microsoftonline.com/\(tenantId)/oauth2/v2.0/token") else {
+            throw AuthError.oauthError("invalid_tenant", "Invalid tenant ID: \(tenantId)")
+        }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
 
-        let scopeString = scopes.joined(separator: " ")
-        let body = "grant_type=refresh_token&client_id=\(clientId)&refresh_token=\(refreshToken)&scope=\(scopeString)"
+        let scopeString = scopes.joined(separator: " ").addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let encodedClientId = clientId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? clientId
+        let encodedRefreshToken = refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? refreshToken
+        let body = "grant_type=refresh_token&client_id=\(encodedClientId)&refresh_token=\(encodedRefreshToken)&scope=\(scopeString)"
         request.httpBody = body.data(using: .utf8)
 
         let (data, _) = try await URLSession.shared.data(for: request)

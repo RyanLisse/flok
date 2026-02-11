@@ -98,11 +98,15 @@ public actor GraphClient {
     }
 
     private func buildURL(path: String, query: [String: String] = [:]) -> URL {
-        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
+        let sanitized = path.hasPrefix("/") ? path : "/\(path)"
+        guard !sanitized.contains(".."),
+              var components = URLComponents(url: baseURL.appendingPathComponent(sanitized), resolvingAgainstBaseURL: false) else {
+            return baseURL
+        }
         if !query.isEmpty {
             components.queryItems = query.map { URLQueryItem(name: $0.key, value: $0.value) }
         }
-        return components.url!
+        return components.url ?? baseURL
     }
 
     private func buildURLRequest(url: URL, method: HTTPMethod) async throws -> URLRequest {
