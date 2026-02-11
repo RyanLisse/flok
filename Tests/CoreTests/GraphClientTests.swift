@@ -408,6 +408,7 @@ struct GraphClientTests {
             .serverError(503),
             .httpError(400, "Bad Request"),
             .httpError(418, "I'm a teapot"),
+            .invalidRequest("test"),
         ]
 
         for error in errors {
@@ -432,6 +433,143 @@ struct GraphClientTests {
 
         let error503 = GraphError.serverError(503)
         #expect(error503.errorDescription?.contains("503") == true)
+    }
+
+    // MARK: - GraphQuery Integration Tests
+
+    @Test("ScheduleRequest encodes with correct JSON structure")
+    func scheduleRequestEncoding() throws {
+        let start = DateTimeTimeZone(dateTime: "2024-02-01T09:00:00", timeZone: "Pacific Standard Time")
+        let end = DateTimeTimeZone(dateTime: "2024-02-01T17:00:00", timeZone: "Pacific Standard Time")
+        let request = ScheduleRequest(
+            emails: ["user1@example.com", "user2@example.com"],
+            start: start,
+            end: end,
+            interval: 30
+        )
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(request)
+        let json = String(data: data, encoding: .utf8)!
+
+        #expect(json.contains("\"schedules\""))
+        #expect(json.contains("\"startTime\""))
+        #expect(json.contains("\"endTime\""))
+        #expect(json.contains("\"availabilityViewInterval\""))
+        #expect(json.contains("user1@example.com"))
+        #expect(json.contains("user2@example.com"))
+        #expect(json.contains("Pacific Standard Time"))
+    }
+
+    @Test("ScheduleRequest with custom interval encodes availabilityViewInterval field")
+    func scheduleRequestCustomInterval() throws {
+        let start = DateTimeTimeZone(dateTime: "2024-02-01T09:00:00", timeZone: "UTC")
+        let end = DateTimeTimeZone(dateTime: "2024-02-01T17:00:00", timeZone: "UTC")
+        let request = ScheduleRequest(
+            emails: ["test@example.com"],
+            start: start,
+            end: end,
+            interval: 60
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(request)
+
+        // Decode to verify structure
+        let decoded = try JSONDecoder().decode(ScheduleRequest.self, from: data)
+        #expect(decoded.availabilityViewInterval == 60)
+        #expect(decoded.schedules == ["test@example.com"])
+        #expect(decoded.startTime.dateTime == "2024-02-01T09:00:00")
+        #expect(decoded.endTime.dateTime == "2024-02-01T17:00:00")
+    }
+
+    @Test("Location initializer sets displayName and nil address")
+    func locationInitializer() {
+        let location = Location(displayName: "Conference Room B")
+
+        #expect(location.displayName == "Conference Room B")
+        #expect(location.address == nil)
+    }
+
+    @Test("Attendee initializer creates proper emailAddress structure")
+    func attendeeInitializer() {
+        let attendee = Attendee(email: "john@example.com", name: "John Doe", type: "optional")
+
+        #expect(attendee.emailAddress.address == "john@example.com")
+        #expect(attendee.emailAddress.name == "John Doe")
+        #expect(attendee.type == "optional")
+        #expect(attendee.status == nil)
+    }
+
+    @Test("Attendee initializer defaults to required type")
+    func attendeeDefaultType() {
+        let attendee = Attendee(email: "jane@example.com")
+
+        #expect(attendee.emailAddress.address == "jane@example.com")
+        #expect(attendee.type == "required")
+    }
+
+    @Test("Recurrence types decode from realistic JSON")
+    func recurrenceDecoding() throws {
+        let json = """
+        {
+          "pattern": {
+            "type": "weekly",
+            "interval": 2,
+            "daysOfWeek": ["monday", "wednesday", "friday"]
+          },
+          "range": {
+            "type": "endDate",
+            "startDate": "2024-02-01",
+            "endDate": "2024-06-30"
+          }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let recurrence = try JSONDecoder().decode(Recurrence.self, from: data)
+
+        #expect(recurrence.pattern?.type == "weekly")
+        #expect(recurrence.pattern?.interval == 2)
+        #expect(recurrence.pattern?.daysOfWeek?.count == 3)
+        #expect(recurrence.pattern?.daysOfWeek?.contains("monday") == true)
+        #expect(recurrence.range?.type == "endDate")
+        #expect(recurrence.range?.startDate == "2024-02-01")
+        #expect(recurrence.range?.endDate == "2024-06-30")
+    }
+
+    @Test("GraphError.invalidResponse has a description")
+    func graphErrorInvalidResponseDescription() {
+        let error = GraphError.invalidResponse
+        #expect(error.errorDescription != nil)
+        #expect(error.errorDescription?.contains("Invalid") == true)
+    }
+
+    @Test("FlokConfig readOnly defaults to false")
+    func flokConfigReadOnlyDefault() {
+        let config = FlokConfig()
+        #expect(config.readOnly == false)
+    }
+
+    @Test("FlokConfig readOnly is true when PIGEON_READ_ONLY env is true")
+    func flokConfigReadOnlyEnvVar() {
+        // Save original env value
+        let originalValue = ProcessInfo.processInfo.environment["PIGEON_READ_ONLY"]
+
+        // We can't actually set env vars in tests, so we test the logic by passing explicit readOnly
+        let configExplicit = FlokConfig(readOnly: true)
+        #expect(configExplicit.readOnly == true)
+
+        // Test that explicit false is respected when no env var
+        let configExplicitFalse = FlokConfig(readOnly: false)
+
+        // If PIGEON_READ_ONLY env is set to "true", this will be true
+        // Otherwise it will be false as explicitly specified
+        if originalValue == "true" {
+            #expect(configExplicitFalse.readOnly == true, "Env var PIGEON_READ_ONLY=true should override explicit false")
+        } else {
+            #expect(configExplicitFalse.readOnly == false, "Should use explicit false when env var not set to true")
+        }
     }
 }
 

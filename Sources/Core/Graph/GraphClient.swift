@@ -167,6 +167,7 @@ public enum GraphError: Error, LocalizedError {
     case forbidden
     case notFound
     case httpError(Int, String)
+    case invalidRequest(String)
 
     public var errorDescription: String? {
         switch self {
@@ -177,6 +178,7 @@ public enum GraphError: Error, LocalizedError {
         case .forbidden: "Forbidden — missing required permissions"
         case .notFound: "Resource not found"
         case .httpError(let code, let body): "HTTP \(code): \(body)"
+        case .invalidRequest(let msg): msg
         }
     }
 }

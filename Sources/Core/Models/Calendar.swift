@@ -120,3 +120,33 @@ public struct ScheduleItem: Codable, Sendable {
     public let subject: String?
     public let location: String?
 }
+
+// MARK: - Draft Event (for create)
+
+public struct DraftEvent: Codable, Sendable {
+    public let subject: String
+    public let start: DateTimeTimeZone
+    public let end: DateTimeTimeZone
+    public let location: String?
+    public let attendees: [String]?
+    public let body: String?
+    public let isAllDay: Bool
+
+    public init(
+        subject: String,
+        start: DateTimeTimeZone,
+        end: DateTimeTimeZone,
+        location: String? = nil,
+        attendees: [String]? = nil,
+        body: String? = nil,
+        isAllDay: Bool = false
+    ) {
+        self.subject = subject
+        self.start = start
+        self.end = end
+        self.location = location
+        self.attendees = attendees
+        self.body = body
+        self.isAllDay = isAllDay
+    }
+}

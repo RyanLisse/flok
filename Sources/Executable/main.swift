@@ -19,9 +19,25 @@ import CLI
 
 @main
 struct Flok {
+    @MainActor
     static func main() async throws {
-        let args = CommandLine.arguments.dropFirst()
+        var args = Array(CommandLine.arguments.dropFirst())
         let config = FlokConfig()
+
+        // Parse global --output flag
+        if let outputIndex = args.firstIndex(of: "--output"),
+           outputIndex + 1 < args.count {
+            let outputValue = args[outputIndex + 1]
+            if let format = OutputFormat(rawValue: outputValue) {
+                OutputFormat.current = format
+            } else {
+                print("Error: Invalid output format '\(outputValue)'. Use 'text' or 'json'.")
+                Foundation.exit(1)
+            }
+            // Remove --output and its value from args
+            args.remove(at: outputIndex + 1)
+            args.remove(at: outputIndex)
+        }
 
         guard !config.clientId.isEmpty else {
             print("Error: PIGEON_CLIENT_ID is required.")
@@ -174,7 +190,10 @@ struct Flok {
         🐦 Flok — Microsoft 365 CLI + MCP Server
 
         USAGE:
-          flok <command> [subcommand] [options]
+          flok [--output text|json] <command> [subcommand] [options]
+
+        GLOBAL OPTIONS:
+          --output text|json           Output format (default: text)
 
         COMMANDS:
           auth login                   Authenticate with Microsoft (device code flow)
@@ -210,6 +229,7 @@ struct Flok {
           flok calendar create --title "Team Meeting" --start "2026-02-15T14:00:00" --end "2026-02-15T15:00:00"
           flok contacts list --search "John"
           flok files search "budget"
+          flok --output json mail list
         """)
     }
 }

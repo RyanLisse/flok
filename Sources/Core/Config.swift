@@ -1,5 +1,15 @@
 import Foundation
 
+/// Output format for CLI commands
+public enum OutputFormat: String, Sendable {
+    case text
+    case json
+
+    /// Global output format, set by main.swift
+    @MainActor
+    public static var current: OutputFormat = .text
+}
+
 /// Configuration with priority: CLI args > env vars > defaults.
 public struct FlokConfig: Sendable {
     public let clientId: String
